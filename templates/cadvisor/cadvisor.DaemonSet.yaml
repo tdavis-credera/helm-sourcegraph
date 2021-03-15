@@ -1,0 +1,88 @@
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  annotations:
+    description: DaemonSet to ensure all nodes run a cAdvisor pod.
+    seccomp.security.alpha.kubernetes.io/pod: 'docker/default'
+  labels:
+    deploy: sourcegraph
+    sourcegraph-resource-requires: cluster-admin
+    app.kubernetes.io/component: cadvisor
+  name: cadvisor
+spec:
+  selector:
+    matchLabels:
+      app: cadvisor
+  template:
+    metadata:
+      annotations:
+        description: Collects and exports container metrics.
+        prometheus.io/port: "48080"
+        sourcegraph.prometheus/scrape: "true"
+      labels:
+        deploy: sourcegraph
+        app: cadvisor
+    spec:
+      serviceAccountName: cadvisor
+      containers:
+      - name: cadvisor
+        image: {{ include "cadvisor.container" . }}
+        args:
+        # Kubernetes-specific flags below (other flags are baked into the Docker image)
+        #
+        # disable container labels to allow whitelisting to reduce noise
+        - --store_container_labels=false
+        - --whitelisted_container_labels=io.kubernetes.container.name,io.kubernetes.pod.name,io.kubernetes.pod.namespace,io.kubernetes.pod.uid
+        # it is safe to uncomment this option if you use docker as your container runtime to reduce noise
+        # - --docker_only
+        resources:
+        {{- if .Values.cadvisor.resources.requests }}
+          requests:
+        {{- range $key, $val := .Values.cadvisor.resources.requests }}
+            {{ $key }}: {{ $val }}
+        {{- end }}
+        {{- end }}
+        {{- if .Values.cadvisor.resources.limits }}
+          limits:
+        {{- range $key, $val := .Values.cadvisor.resources.limits }}
+            {{ $key }}: {{ $val }}
+        {{- end }}
+        {{- end }}
+        volumeMounts:
+        - name: rootfs
+          mountPath: /rootfs
+          readOnly: true
+        - name: var-run
+          mountPath: /var/run
+          readOnly: true
+        - name: sys
+          mountPath: /sys
+          readOnly: true
+        - name: docker
+          mountPath: /var/lib/docker
+          readOnly: true
+        - name: disk
+          mountPath: /dev/disk
+          readOnly: true
+        ports:
+        - name: http
+          containerPort: 48080
+          protocol: TCP
+      automountServiceAccountToken: false
+      terminationGracePeriodSeconds: 30
+      volumes:
+      - name: rootfs
+        hostPath:
+          path: /
+      - name: var-run
+        hostPath:
+          path: /var/run
+      - name: sys
+        hostPath:
+          path: /sys
+      - name: docker
+        hostPath:
+          path: /var/lib/docker
+      - name: disk
+        hostPath:
+          path: /dev/disk

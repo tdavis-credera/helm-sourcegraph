@@ -1,0 +1,82 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  annotations:
+    description: Backend for symbols operations.
+  labels:
+    deploy: sourcegraph
+    sourcegraph-resource-requires: no-cluster-admin
+    app.kubernetes.io/component: symbols
+  name: symbols
+spec:
+  minReadySeconds: 10
+  replicas: {{ .Values.symbols.replicas }}
+  revisionHistoryLimit: 10
+  selector:
+    matchLabels:
+      app: symbols
+  strategy:
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 1
+    type: RollingUpdate
+  template:
+    metadata:
+      labels:
+        deploy: sourcegraph
+        app: symbols
+    spec:
+      containers:
+      - name: symbols
+        env:
+        - name: SYMBOLS_CACHE_SIZE_MB
+          value: "100000"
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        - name: CACHE_DIR
+          value: /mnt/cache/$(POD_NAME)
+        image: {{ include "symbols.container" . }}
+        terminationMessagePolicy: FallbackToLogsOnError
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: http
+            scheme: HTTP
+          initialDelaySeconds: 60
+          timeoutSeconds: 5
+        readinessProbe:
+          httpGet:
+            path: /healthz
+            port: http
+            scheme: HTTP
+          periodSeconds: 5
+          timeoutSeconds: 5
+        ports:
+        - containerPort: 3184
+          name: http
+        - containerPort: 6060
+          name: debug
+        resources:
+        {{- if .Values.symbols.resources.requests }}
+          requests:
+        {{- range $key, $val := .Values.symbols.resources.requests }}
+            {{ $key }}: {{ $val }}
+        {{- end }}
+        {{- end }}
+        {{- if .Values.symbols.resources.limits }}
+          limits:
+        {{- range $key, $val := .Values.symbols.resources.limits }}
+            {{ $key }}: {{ $val }}
+        {{- end }}
+        {{- end }}
+        volumeMounts:
+        - mountPath: /mnt/cache
+          name: cache-ssd
+      {{ include "jaegerAgent.spec" . | indent 6 }}
+      securityContext:
+        runAsUser: 0
+      volumes:
+      - emptyDir: {}
+        name: cache-ssd

@@ -1,0 +1,61 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  annotations:
+    description: Backend for syntax highlighting operations.
+  labels:
+    deploy: sourcegraph
+    sourcegraph-resource-requires: no-cluster-admin
+    app.kubernetes.io/component: syntect-server
+  name: syntect-server
+spec:
+  minReadySeconds: 10
+  replicas: {{ .Values.syntectServer.replicas }}
+  revisionHistoryLimit: 10
+  selector:
+    matchLabels:
+      app: syntect-server
+  strategy:
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+    type: RollingUpdate
+  template:
+    metadata:
+      labels:
+        deploy: sourcegraph
+        app: syntect-server
+    spec:
+      containers:
+      - name: syntect-server
+        env:
+        image: {{ include "syntectServer.container" . }}
+        terminationMessagePolicy: FallbackToLogsOnError
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: http
+            scheme: HTTP
+          initialDelaySeconds: 5
+          timeoutSeconds: 5
+        ports:
+        - containerPort: 9238
+          name: http
+        readinessProbe:
+          tcpSocket:
+            port: http
+        resources:
+        {{- if .Values.syntectServer.resources.requests }}
+          requests:
+        {{- range $key, $val := .Values.syntectServer.resources.requests }}
+            {{ $key }}: {{ $val }}
+        {{- end }}
+        {{- end }}
+        {{- if .Values.syntectServer.resources.limits }}
+          limits:
+        {{- range $key, $val := .Values.syntectServer.resources.limits }}
+            {{ $key }}: {{ $val }}
+        {{- end }}
+        {{- end }}
+      securityContext:
+        runAsUser: 0

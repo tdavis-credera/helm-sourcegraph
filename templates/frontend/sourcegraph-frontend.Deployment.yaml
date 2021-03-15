@@ -1,0 +1,151 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  annotations:
+    description: Serves the frontend of Sourcegraph via HTTP(S).
+  labels:
+    deploy: sourcegraph
+    sourcegraph-resource-requires: no-cluster-admin
+    app.kubernetes.io/component: frontend
+  name: sourcegraph-frontend
+spec:
+  minReadySeconds: 10
+  replicas: {{ .Values.frontend.replicas }}
+  revisionHistoryLimit: 10
+  selector:
+    matchLabels:
+      app: sourcegraph-frontend
+  strategy:
+    rollingUpdate:
+      maxSurge: 2
+      maxUnavailable: 0
+    type: RollingUpdate
+  template:
+    metadata:
+      labels:
+        app: sourcegraph-frontend
+        deploy: sourcegraph
+    spec:
+      containers:
+      - name: frontend
+        image: {{ include "frontend.container" . }}
+        args:
+        - serve
+        env:
+        - name: CODEINSIGHTS_PGDATASOURCE
+          value: postgres://postgres:password@codeinsights-db:5432/postgres
+        {{- if .Values.codeinteldb.enabled }}
+        - name: CODEINTEL_PGDATABASE
+          value: sg
+        - name: CODEINTEL_PGHOST
+          value: codeintel-db
+        - name: CODEINTEL_PGPORT
+          value: "5432"
+        - name: CODEINTEL_PGSSLMODE
+          value: disable
+        - name: CODEINTEL_PGUSER
+          value: sg
+        {{- else }}
+        {{- range .Values.codeinteldb.envVars }}
+        - name: {{ .name }}
+          value: {{ .value | quote }}
+        {{- end }}
+        {{- end }}
+        {{- if .Values.pgsql.enabled }}
+        - name: PGDATABASE
+          value: "sg"
+        - name: PGHOST
+          value: "pgsql"
+        - name: PGPORT
+          value: "5432"
+        - name: PGSSLMODE
+          value: "disable"
+        - name: PGUSER
+          value: "sg"
+        {{- else }}
+        {{- range .Values.pgsql.envVars }}
+        - name: {{ .name }}
+          value: {{ .value | quote }}
+        {{- end }}
+        {{- end }}
+        {{- if .Values.redis.enabled }}
+        - name: REDIS_CACHE_ENDPOINT 
+          value: 
+        - name: REDIS_STORE_ENDPOINT
+          value:
+        {{- else }}
+        {{- range .Values.redis.envVars }}
+        - name: {{ .name }}
+          value: {{ .value | quote }}
+        {{- end }}
+        {{- end }}  
+        {{- if .Values.minio.enabled }}
+        {{- else }}
+        {{- range .Values.minio.envVars }}
+        - name: {{ .name }}
+          value: {{ .value | quote }}
+        {{- end }}
+        {{- end }}                   
+        # POD_NAME is used by CACHE_DIR
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        # CACHE_DIR stores larger items we cache. Majority of it is zip
+        # archives of repositories at a commit.
+        - name: CACHE_DIR
+          value: /mnt/cache/$(POD_NAME)
+        - name: GRAFANA_SERVER_URL
+          value: http://grafana:30070
+        - name: JAEGER_SERVER_URL
+          value: http://jaeger-query:16686
+        - name: PROMETHEUS_URL
+          value: http://prometheus:30090
+        # External resources
+        {{- range .Values.frontend.envVars }}
+        - name: {{ .name }}
+          value: {{ .value | quote }}
+        {{- end }}
+        terminationMessagePolicy: FallbackToLogsOnError
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: http
+            scheme: HTTP
+          initialDelaySeconds: 300
+          timeoutSeconds: 5
+        readinessProbe:
+          httpGet:
+            path: /healthz
+            port: http
+            scheme: HTTP
+          periodSeconds: 5
+          timeoutSeconds: 5
+        ports:
+        - containerPort: 3080
+          name: http
+        - containerPort: 3090
+          name: http-internal
+        resources:
+        {{- if .Values.frontend.resources.requests }}
+          requests:
+        {{- range $key, $val := .Values.frontend.resources.requests }}
+            {{ $key }}: {{ $val }}
+        {{- end }}
+        {{- end }}
+        {{- if .Values.frontend.resources.limits }}
+          limits:
+        {{- range $key, $val := .Values.frontend.resources.limits }}
+            {{ $key }}: {{ $val }}
+        {{- end }}
+        {{- end }}
+        volumeMounts:
+        - mountPath: /mnt/cache
+          name: cache-ssd
+      {{ include "jaegerAgent.spec" . | indent 6 }}
+      securityContext:
+        runAsUser: 0
+      serviceAccountName: sourcegraph-frontend
+      volumes:
+      - emptyDir: {}
+        name: cache-ssd

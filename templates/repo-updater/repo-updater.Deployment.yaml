@@ -1,0 +1,74 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  annotations:
+    description: Handles repository metadata (not Git data) lookups and updates from
+      external code hosts and other similar services.
+  labels:
+    deploy: sourcegraph
+    sourcegraph-resource-requires: no-cluster-admin
+    app.kubernetes.io/component: repo-updater
+  name: repo-updater
+spec:
+  minReadySeconds: 10
+  replicas: {{ .Values.repoUpdater.replicas }}
+  revisionHistoryLimit: 10
+  selector:
+    matchLabels:
+      app: repo-updater
+  strategy:
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+    type: RollingUpdate
+  template:
+    metadata:
+      labels:
+        deploy: sourcegraph
+        app: repo-updater
+    spec:
+      containers:
+      - name: repo-updater
+        image: {{ include "repoUpdater.container" . }}
+        env:
+        {{- if .Values.redis.enabled }}
+        - name: REDIS_CACHE_ENDPOINT 
+          value: 
+        - name: REDIS_STORE_ENDPOINT
+          value:
+        {{- else }}
+        {{- range .Values.redis.envVars }}
+        - name: {{ .name }}
+          value: {{ .value | quote }}
+        {{- end }}
+        {{- end }}       
+        terminationMessagePolicy: FallbackToLogsOnError
+        ports:
+        - containerPort: 3182
+          name: http
+        - containerPort: 6060
+          name: debug
+        readinessProbe:
+          failureThreshold: 3
+          httpGet:
+            path: /healthz
+            port: http
+            scheme: HTTP
+          periodSeconds: 1
+          timeoutSeconds: 5
+        resources:
+        {{- if .Values.repoUpdater.resources.requests }}
+          requests:
+        {{- range $key, $val := .Values.repoUpdater.resources.requests }}
+            {{ $key }}: {{ $val }}
+        {{- end }}
+        {{- end }}
+        {{- if .Values.repoUpdater.resources.limits }}
+          limits:
+        {{- range $key, $val := .Values.repoUpdater.resources.limits }}
+            {{ $key }}: {{ $val }}
+        {{- end }}
+        {{- end }}
+      {{ include "jaegerAgent.spec" . | indent 6 }}
+      securityContext:
+        runAsUser: 0

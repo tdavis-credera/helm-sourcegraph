@@ -1,0 +1,51 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  annotations:
+    description: Rate-limiting proxy for the GitHub API.
+  labels:
+    deploy: sourcegraph
+    sourcegraph-resource-requires: no-cluster-admin
+    app.kubernetes.io/component: github-proxy
+  name: github-proxy
+spec:
+  minReadySeconds: 10
+  replicas: {{ .Values.githubProxy.replicas }}
+  revisionHistoryLimit: 10
+  selector:
+    matchLabels:
+      app: github-proxy
+  strategy:
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+    type: RollingUpdate
+  template:
+    metadata:
+      labels:
+        app: github-proxy
+        deploy: sourcegraph
+    spec:
+      containers:
+      - name: github-proxy
+        image: {{ include "githubProxy.container" . }}
+        terminationMessagePolicy: FallbackToLogsOnError
+        ports:
+        - containerPort: 3180
+          name: http
+        resources:
+        {{- if .Values.githubProxy.resources.requests }}
+          requests:
+        {{- range $key, $val := .Values.githubProxy.resources.requests }}
+            {{ $key }}: {{ $val }}
+        {{- end }}
+        {{- end }}
+        {{- if .Values.githubProxy.resources.limits }}
+          limits:
+        {{- range $key, $val := .Values.githubProxy.resources.limits }}
+            {{ $key }}: {{ $val }}
+        {{- end }}
+        {{- end }}
+      {{ include "jaegerAgent.spec" . | indent 6 }}
+      securityContext:
+        runAsUser: 0

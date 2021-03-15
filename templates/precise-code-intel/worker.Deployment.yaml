@@ -1,0 +1,80 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  annotations:
+    description: Handles conversion of uploaded precise code intelligence bundles.
+  labels:
+    deploy: sourcegraph
+    sourcegraph-resource-requires: no-cluster-admin
+    app.kubernetes.io/component: precise-code-intel
+  name: precise-code-intel-worker
+spec:
+  minReadySeconds: 10
+  replicas: {{ .Values.preciseCodeIntel.replicas }}
+  revisionHistoryLimit: 10
+  selector:
+    matchLabels:
+      app: precise-code-intel-worker
+  strategy:
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 1
+    type: RollingUpdate
+  template:
+    metadata:
+      labels:
+        deploy: sourcegraph
+        app: precise-code-intel-worker
+    spec:
+      containers:
+      - name: precise-code-intel-worker
+        env:
+        - name: NUM_WORKERS
+          value: '4'
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        {{- if .Values.minio.enabled }}
+        {{- else }}
+        {{- range .Values.minio.envVars }}
+        - name: {{ .name }}
+          value: {{ .value | quote }}
+        {{- end }}
+        {{- end }} 
+        image: {{ include "preciseCodeIntel.container" . }}
+        terminationMessagePolicy: FallbackToLogsOnError
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: http
+            scheme: HTTP
+          initialDelaySeconds: 60
+          timeoutSeconds: 5
+        readinessProbe:
+          httpGet:
+            path: /healthz
+            port: http
+            scheme: HTTP
+          periodSeconds: 5
+          timeoutSeconds: 5
+        ports:
+        - containerPort: 3188
+          name: http
+        - containerPort: 6060
+          name: debug
+        resources:
+        {{- if .Values.preciseCodeIntel.resources.requests }}
+          requests:
+        {{- range $key, $val := .Values.preciseCodeIntel.resources.requests }}
+            {{ $key }}: {{ $val }}
+        {{- end }}
+        {{- end }}
+        {{- if .Values.preciseCodeIntel.resources.limits }}
+          limits:
+        {{- range $key, $val := .Values.preciseCodeIntel.resources.limits }}
+            {{ $key }}: {{ $val }}
+        {{- end }}
+        {{- end }}
+      securityContext:
+        runAsUser: 0

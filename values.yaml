@@ -1,0 +1,397 @@
+# Global values shared for sourcegraph
+image:
+# image.registry -- The default container repository for all images
+  registry: index.docker.io
+# image.tag -- The default container image tag
+  tag: latest
+persistentVolume:
+# persistentVolume.storageClass - The kubernetes persistant storageClass    
+  storageClass: ebs-csi-driver
+## Values to configure the cadvisor container
+cadvisor:
+  image:
+# cadvisor.image.name -- The name of the container for cadvisor
+    name: sourcegraph/cadvisor
+# cadvisor.image.tag -- Override the tag for cadvisor container
+    tag: insiders@sha256:66afd169a02ffd5eaafdd4a41c8382b3af26c7eea9dd3c5b18a5990f548ca027
+# cadvisor.resources -- The kubernetes resource spec for the cadvisor container
+  resources:
+    requests:
+      memory: 100Mi
+      cpu: 100m
+    limits:
+      memory: 1000Mi
+      cpu: 200m
+## Values to configure the codeinsights-db container
+codeinsigtsdb:
+# codeinsigtsdb.repicas -- The number of codeinsigtsdb replicas
+  replicas: 1
+  image:
+# codeinsigtsdb.image.name -- The name of the container for codeinsights-db
+    name: sourcegraph/codeinsights-db
+# codeinsigtsdb.image.tag -- Override the tag for codeinsights-db container
+    tag: insiders@sha256:f985af2fef860cc48be40ded864df025b8794b02b86e66cbc6c55bfe3c418831
+# codeinsigtsdb.resources -- The kubernetes resource spec for the codeinsights-db container
+  resources:
+    limits:
+      cpu: "2"
+      memory: 1Gi
+    requests:
+      cpu: "2"
+      memory: 1Gi
+    storage: 100Gi
+## Values to configure the github-proxy container
+githubProxy:
+# githubProxy.repicas -- The number of github-proxy replicas
+  replicas: 1
+  image:
+# githubProxy.image.name -- The name of the container for github-proxy
+    name: sourcegraph/github-proxy
+# githubProxy.image.tag -- Override the tag for github-proxy container
+    tag: insiders@sha256:a0e34d440bec14d8b929b6e5d723a3b4060b84be5418223e73ddebf6585c1bd6
+# githubProxy.resources -- The kubernetes resource spec for the github-proxy container
+  resources:
+    limits:
+      cpu: 500m
+      memory: 500M
+    requests:
+      cpu: 100m
+      memory: 250M
+## Values to configure the frontend container
+## Replicas are based on the number of users of the service, set 1 replica for every 500 Users. 
+## https://docs.sourcegraph.com/admin/install/kubernetes/scale
+frontend:
+# frontend.repicas -- The number of frontend replicas
+  replicas: 1
+# frontend.envVars -- A list of env vars (name, value maps) for the frontend container
+  envVars:
+## The environementr variable "SRC_GIT_SERVERS" should reflect the number of replicas set for gitserver
+## https://docs.sourcegraph.com/admin/install/kubernetes/configure#configure-gitserver-replica-count
+    - name: SRC_GIT_SERVERS
+      value: gitserver-0.gitserver:3178 gitserver-1.gitserver:3178
+  image:
+# frontend.image.name -- The name of the container for frontend
+    name: sourcegraph/frontend
+# frontend.image.tag -- Override the tag for frontend container
+    tag: insiders@sha256:2f7cbdaa0c6ec68f5c8794e67b1934d5f55a62d4877b3a244c253b28ffc7a582
+# frontend.resources -- The kubernetes resource spec for the frontend container
+  resources:
+    limits:
+      cpu: "2"
+      ephemeral-storage: "4Gi"
+      memory: 2G
+    requests:
+      cpu: "1"
+      ephemeral-storage: "2Gi"
+      memory: 1G
+  ingress:
+# frontend.ingress.host -- The host name for sourcegraph frontend
+    host: sourcegraph.example.com
+## Values to configure gitserver container
+## Replicas are based on the number of repos. 200 - 500 repos needs 2 replicas. 
+## https://docs.sourcegraph.com/admin/install/kubernetes/scale
+gitserver:
+# gitserver.repicas -- The number of gitserver replicas
+  replicas: 2
+  image:
+# gitserver.image.name -- The name of the container for gitserver
+    name: sourcegraph/gitserver
+# gitserver.image.tag -- Override the tag for gitserver container
+    tag: insiders@sha256:c515d02a4ca5a284ae041131ccb9560fe20a4bb74af8f121b235dd64340d3168
+# gitserver.resources -- The kubernetes resource spec for the gitserver container
+  resources:
+    limits:
+      cpu: "2"
+      memory: 4G
+    requests:
+      cpu: "2" 
+      memory: 4G     
+    storage: 20Gi
+## Values to override grafana service
+grafana:
+# grafana.repicas -- The number of grafana replicas
+  replicas: 1
+  image:
+# grafana.image.name -- The name of the container for grafana
+    name: sourcegraph/grafana
+# grafana.image.tag -- Override the tag for grafana container
+    tag: insiders@sha256:ba07ec6572fb1b30f97c7ffbe7bfaec4e008a944e367f4f0cd4853c88e5a5fa4
+# grafana.resources -- The kubernetes resource spec for the grafana container
+  resources:
+    limits:
+      cpu: "1"
+      memory: 512Mi
+    requests:
+      cpu: 100m
+      memory: 512Mi
+    storage: 2Gi
+## Values to configure indexed-search container
+indexedSearch:
+# indexedSearch.repicas -- The number of indexed-search replicas
+  replicas: 1
+# indexedSearch.resources -- The kubernetes resource spec for the indexed-searcher container
+  resources:
+## This should typically be gitserver disk size multipled by the number of gitserver shards.   
+    storage: 100Gi
+  zoektwebserver:
+    image:
+# indexedSearch.zoektwebserver.image.name -- The name of the container for indexed-searcher
+      name: sourcegraph/indexed-searcher
+# indexedSearch.zoektwebserver.image.tag -- Override the tag for indexed-searcher container
+      tag: insiders@sha256:e5a191417e8cc85e357d9456ae48da8e919795b16057337dddd1309f5800a82d
+# indexedSearch.zoektwebserver.resources -- The kubernetes resource spec for the indexed-searcher container
+## allocate enough memory to hold ~2.7x the size of all non-binary files in your repositories
+    resources:
+      limits:
+        cpu: "1"
+        memory: 2G
+      requests:
+        cpu: 250m
+        memory: 1G
+  zoektindexserver:
+    image:
+# indexedSearch.zoektindexserver.image.name -- The name of the container for search-indexer
+      name: sourcegraph/search-indexer
+# indexedSearch.zoektindexserver.image.tag -- Override the tag for search-indexer container
+      tag: insiders@sha256:d3c2779b9b3fccc46bacef8deb68653e9ee6fda5df6c455419149201bc245a43
+# indexedSearch.zoektindexserver.resources -- The kubernetes resource spec for the search-indexer container
+## allocate enough memory to hold all non-binary files in your largest repository
+    resources:
+      limits:
+        cpu: "2"
+        memory: 2G
+      requests:
+        cpu: "1"
+        memory: 1G
+## Values to configure jaeger container
+jaeger:
+# jaeger.repicas -- The number of jaeger replicas
+  replicas: 1
+  image:
+# jaeger.image.name -- The name of the container for jaeger
+    name: sourcegraph/jaeger-all-in-one
+# jaeger.image.tag -- Override the tag for jaeger container
+    tag: insiders@sha256:2d0a0d21ae3d44bc919da86994edfd63c1dce2742ccf3a71de6f7cd501abc6b1
+# jaeger.resources -- The kubernetes resource spec for the jaeger container
+  resources:
+    limits:
+      cpu: 500m
+      memory: 512M
+    requests:
+      cpu: 250m
+      memory: 250M
+## Values to configure precise-code-intel container
+preciseCodeIntel:
+# preciseCodeIntel.repicas -- The number of precise-code-intel replicas
+  replicas: 1
+  image:
+# preciseCodeIntel.image.name -- The name of the container for precise-code-intel
+    name: sourcegraph/precise-code-intel-worker
+# preciseCodeIntel.image.tag -- Override the tag for precise-code-intel container
+    tag: insiders@sha256:082fa390b45d79e31a43ab7249b69d2078793023f47d38c11cd323a520c21466
+# preciseCodeIntel.resources -- The kubernetes resource spec for the precise-code-intel container
+  resources:
+    limits:
+      cpu: "1"
+      memory: 2G
+    requests:
+      cpu: 250m
+      memory: 1G
+## Values to configure prometheus service
+prometheus:
+# prometheus.repicas -- The number of prometheus replicas
+  replicas: 1
+  image:
+# prometheus.image.name -- The name of the container for prometheus
+    name: sourcegraph/prometheus
+# prometheus.image.tag -- Override the tag for prometheus container
+    tag: insiders@sha256:50689fe08a65e92e641be112a3dd6a53761155a6318f19191986ce0aea8aa232
+# prometheus.resources -- The kubernetes resource spec for the prometheus container
+  resources:
+    limits:
+      cpu: "1"
+      memory: 2G
+    requests:
+      cpu: 250m
+      memory: 2G
+    storage: 100Gi
+## Values to configure query-runner container
+queryRunner:
+# queryRunner.repicas -- The number of query-runner replicas
+  replicas: 1
+  image:
+# queryRunner.image.name -- The name of the container for query-runner
+    name: sourcegraph/query-runner
+# queryRunner.image.tag -- Override the tag for query-runner container
+    tag: insiders@sha256:e8ef08adf05eb244b1d97dd71e5f5acd36f2ae3d928d09c7cc35ab49507ab75a
+# queryRunner.resources -- The kubernetes resource spec for the query-runner container
+  resources:
+    limits:
+      cpu: 500m
+      memory: 500M
+    requests:
+      cpu: 250m
+      memory: 500M
+## Values to configure repo-updater service
+repoUpdater:
+# repoUpdater.repicas -- The number of repo-updater replicas
+  replicas: 1
+  image:
+# repoUpdater.image.name -- The name of the container for repo-updater
+    name: sourcegraph/repo-updater
+# repoUpdater.image.tag -- Override the tag for repo-updater container
+    tag: insiders@sha256:e081b7b493fe83b30cd520915773f7efa38e06edf0c7e44c213ac092d7081d92
+# repoUpdater.resources -- The kubernetes resource spec for the repo-updater container
+  resources:
+    limits:
+      cpu: 500m
+      memory: 1Gi
+    requests:
+      cpu: 500m
+      memory: 250Mi
+## Values to configure searcher container
+## Replicas are based on the number of repos. 200 - 1k repos needs 5-10 replicas. 
+## https://docs.sourcegraph.com/admin/install/kubernetes/scale
+searcher:
+# searcher.repicas -- The number of searcher replicas
+  replicas: 5
+  image:
+# searcher.image.name -- The name of the container for searcher
+    name: sourcegraph/searcher
+# searcher.image.tag -- Override the tag for searcher container
+    tag: insiders@sha256:807c80c9ec6ed77fc815563f54a4e2334910a7ed31170aca2234454ccfef4bc8
+# searcher.resources -- The kubernetes resource spec for the searcher container
+## CPU/memory resource allocations (allocate enough memory to hold all non-binary files in your repositories)
+  resources:
+    limits:
+      cpu: "2"
+      ephemeral-storage: "4Gi"
+      memory: 2G
+    requests:
+      cpu: 500m
+      ephemeral-storage: "2Gi"
+      memory: 500M
+## Values to configure symbols service
+symbols:
+# symbols.repicas -- The number of symbols replicas
+  replicas: 1
+  image:
+# symbols.image.name -- The name of the container for symbols
+    name: sourcegraph/symbols
+# symbols.image.tag -- Override the tag for symbols container
+    tag: insiders@sha256:ea23d4d5e158ca75c324283d8f398f61d413685c2702ec54c650b732317129ac
+# symbols.resources -- The kubernetes resource spec for the symbols container
+  resources:
+    limits:
+      cpu: "1"
+      ephemeral-storage: "4Gi"
+      memory: 1G
+    requests:
+      cpu: 250m
+      ephemeral-storage: "2Gi"
+      memory: 250M
+## Values to configure syntect-server container
+syntectServer:
+# syntectServer.repicas -- The number of syntect-server replicas
+  replicas: 1
+  image: 
+# syntectServer.image.name -- The name of the container for syntect-server
+    name: sourcegraph/syntax-highlighter
+# syntectServer.image.tag -- Override the tag for syntect-server container
+    tag: insiders@sha256:83ff65809e6647b466bd400de4c438a32feeabe8e791b12e15c67c84529ad2de
+# syntectServer.resources -- The kubernetes resource spec for the syntect-server container
+  resources:
+    limits:
+      cpu: "2"
+      memory: 2G
+    requests:
+      cpu: 250m
+      memory: 1G
+## Values to configure the jaeger-agent
+jaegerAgent:
+  image:
+# jaegerAgent.image.name -- The name of the container for jaeger-agent
+    name: sourcegraph/jaeger-agent
+# jaegerAgent.image.tag -- Override the tag for jaeger-agent container
+    tag: insiders@sha256:ed0d7dfc8f188a41a2113c3eab1f3ccac41d392be7e7fc3258f58623747bf00b
+# jaegerAgent.resources -- The kubernetes resource spec for the jaeger-agent container
+  resources:
+    limits:
+      cpu: 500m
+      memory: 250M
+    requests:
+      cpu: 100m
+      memory: 100M
+# Internal services - enable if there is no external alternative
+## Values to configure the pgsql container
+pgsql:
+# pgsql.enabled -- Enable/Disable internal frontend postgress sql container
+  enabled: false
+# pgsql.envVars -- A list of env vars (name, value maps) for the frontend container
+  envVars:
+    - name: PGDATABASE
+      value: sg
+    - name: PGHOST
+      value: pgsql
+    - name: PGPORT
+      value: "5432"
+    - name: PGSSLMODE
+      value: required
+    - name: PGUSER
+      value: sg
+    - name: PGPASSWORD
+      value: password  
+## Values to configure the redis container
+redis:
+# redis.enabled -- Enable/Disable internal redis container
+  enabled: false
+# redis.envVars -- A list of env vars (name, value maps) for the frontend/repo-uploader container  
+  envVars:
+    - name: REDIS_CACHE_ENDPOINT 
+      value: 
+    - name: REDIS_STORE_ENDPOINT
+      value:
+## Values to configure the minio container
+minio:
+# minio.enabled -- Enable/Disable internal minio container - update the frontend/precise-code-intel envVars
+  enabled: false
+# minio.envVars -- A list of env vars (name, value maps) for the frontend/precise-code-intel container
+  envVars:  
+## To target an S3 bucket you’ve already provisioned, set the following environment variables. 
+## Authentication is done through an access and secret key pair (and optional session token).
+    - name: PRECISE_CODE_INTEL_UPLOAD_BACKEND
+      value: S3
+    - name: PRECISE_CODE_INTEL_UPLOAD_BUCKET
+      value: handy-sourcegraph
+    - name: PRECISE_CODE_INTEL_UPLOAD_AWS_ACCESS_KEY_ID
+      value: <your access key>
+    - name: PRECISE_CODE_INTEL_UPLOAD_AWS_SECRET_ACCESS_KEY
+      value: <your secret key>
+    - name: PRECISE_CODE_INTEL_UPLOAD_AWS_SESSION_TOKEN
+      value: <your session token> (optional)
+    - name: PRECISE_CODE_INTEL_UPLOAD_AWS_REGION
+      value: us-east-1
+## If you would like to allow your Sourcegraph instance to control the creation and lifecycle 
+## configuration management of the target buckets, set the following environment variables:
+    # - name: PRECISE_CODE_INTEL_UPLOAD_MANAGE_BUCKET
+    #   value: true
+    # - name: PRECISE_CODE_INTEL_UPLOAD_TTL
+    #   value: 168h  
+## Values to configure the codeintel-db container
+codeinteldb:
+# codeinteldb.enabled -- Enable/Disable internal codeinteldb postgress sql container
+  enabled: false
+# codeinteldb.envVars -- A list of env vars (name, value maps) for the frontend container
+  envVars:
+    - name: CODEINTEL_PGHOST
+      value: pgsql
+    - name: CODEINTEL_PGPORT
+      value: "5432"
+    - name: CODEINTEL_PGUSER
+      value: sg
+    - name: CODEINTEL_PGPASSWORD
+      value: password
+    - name: CODEINTEL_PGDATABASE
+      value: sg_codeintel
+    - name: CODEINTEL_PGSSLMODE
+      value: required  

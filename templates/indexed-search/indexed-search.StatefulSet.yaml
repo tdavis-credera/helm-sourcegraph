@@ -1,0 +1,98 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  annotations:
+    description: Backend for indexed text search operations.
+  labels:
+    deploy: sourcegraph
+    sourcegraph-resource-requires: no-cluster-admin
+    app.kubernetes.io/component: indexed-search
+  name: indexed-search
+spec:
+  replicas: {{ .Values.indexedSearch.replicas }}
+  revisionHistoryLimit: 10
+  selector:
+    matchLabels:
+      app: indexed-search
+  serviceName: indexed-search
+  template:
+    metadata:
+      labels:
+        app: indexed-search
+        deploy: sourcegraph
+    spec:
+      containers:
+      - name: zoekt-webserver
+        image: {{ include "indexedSearch.zoektwebserver.container" . }}
+        terminationMessagePolicy: FallbackToLogsOnError
+        ports:
+        - containerPort: 6070
+          name: http
+        readinessProbe:
+          failureThreshold: 3
+          httpGet:
+            path: /healthz
+            port: http
+            scheme: HTTP
+          periodSeconds: 5
+          timeoutSeconds: 5
+        resources:
+        {{- if .Values.indexedSearch.zoektwebserver.resources.requests }}
+          requests:
+        {{- range $key, $val := .Values.indexedSearch.zoektwebserver.resources.requests }}
+            {{ $key }}: {{ $val }}
+        {{- end }}
+        {{- end }}
+        {{- if .Values.indexedSearch.zoektwebserver.resources.limits }}
+          limits:
+        {{- range $key, $val := .Values.indexedSearch.zoektwebserver.resources.limits }}
+            {{ $key }}: {{ $val }}
+        {{- end }}
+        {{- end }}
+        volumeMounts:
+        - mountPath: /data
+          name: data
+      - name: zoekt-indexserver
+        image: {{ include "indexedSearch.zoektindexserver.container" . }}
+        terminationMessagePolicy: FallbackToLogsOnError
+        ports:
+        - containerPort: 6072
+          name: index-http
+        resources:
+          # zoekt-indexserver is CPU bound. The more CPU you allocate to it, the
+          # lower lag between a new commit and it being indexed for search.
+        {{- if .Values.indexedSearch.zoektindexserver.resources.requests }}
+          requests:
+        {{- range $key, $val := .Values.indexedSearch.zoektindexserver.resources.requests }}
+            {{ $key }}: {{ $val }}
+        {{- end }}
+        {{- end }}
+        {{- if .Values.indexedSearch.zoektindexserver.resources.limits }}
+          limits:
+        {{- range $key, $val := .Values.indexedSearch.zoektindexserver.resources.limits }}
+            {{ $key }}: {{ $val }}
+        {{- end }}
+        {{- end }}
+        volumeMounts:
+        - mountPath: /data
+          name: data
+      securityContext:
+        runAsUser: 0
+      volumes:
+      - name: data
+  updateStrategy:
+    type: RollingUpdate
+  volumeClaimTemplates:
+  - metadata:
+      labels:
+        deploy: sourcegraph
+      name: data
+    spec:
+      accessModes:
+      - ReadWriteOnce
+      resources:
+        requests:
+          # The size of disk to used for search indexes.
+          # This should typically be gitserver disk size multipled by the number of gitserver shards.
+          storage: {{ .Values.indexedSearch.resources.storage }}
+      storageClassName: {{ .Values.persistentVolume.storageClass }}

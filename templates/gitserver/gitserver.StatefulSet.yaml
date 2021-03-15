@@ -1,0 +1,83 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  annotations:
+    description: Stores clones of repositories to perform Git operations.
+  labels:
+    deploy: sourcegraph
+    sourcegraph-resource-requires: no-cluster-admin
+    app.kubernetes.io/component: gitserver
+  name: gitserver
+spec:
+  replicas: {{ .Values.gitserver.replicas }}
+  revisionHistoryLimit: 10
+  selector:
+    matchLabels:
+      app: gitserver
+  serviceName: gitserver
+  template:
+    metadata:
+      labels:
+        app: gitserver
+        group: backend
+        type: gitserver
+        deploy: sourcegraph
+    spec:
+      containers:
+      - name: gitserver
+        args: ["run"]
+        image: {{ include "gitserver.container" . }}
+        terminationMessagePolicy: FallbackToLogsOnError
+        livenessProbe:
+          initialDelaySeconds: 5
+          tcpSocket:
+            port: rpc
+          timeoutSeconds: 5
+        ports:
+        - containerPort: 3178
+          name: rpc
+        resources:
+        {{- if .Values.gitserver.resources.requests }}
+          requests:
+        {{- range $key, $val := .Values.gitserver.resources.requests }}
+            {{ $key }}: {{ $val }}
+        {{- end }}
+        {{- end }}
+        {{- if .Values.gitserver.resources.limits }}
+          limits:
+        {{- range $key, $val := .Values.gitserver.resources.limits }}
+            {{ $key }}: {{ $val }}
+        {{- end }}
+        {{- end }}
+        volumeMounts:
+        - mountPath: /data/repos
+          name: repos
+        # See the customization guide (../../../docs/configure.md) for information
+        # about configuring gitserver to use an SSH key
+        # - mountPath: /root/.ssh
+        #   name: ssh
+      {{ include "jaegerAgent.spec" . | indent 6 }}
+      securityContext:
+        runAsUser: 0
+      volumes:
+      - name: repos
+      # See the customization guide (../../../docs/configure.md) for information
+      # about configuring gitserver to use an SSH key
+      # - name: ssh
+      #   secret:
+      #     defaultMode: 384
+      #     secretName: gitserver-ssh
+  updateStrategy:
+    type: RollingUpdate
+  volumeClaimTemplates:
+  - metadata:
+      name: repos
+    spec:
+      accessModes:
+      - ReadWriteOnce
+      resources:
+        requests:
+          # The size of disk used to mirror your git repositories.
+          # If you change this, also change indexed-search's disk size.
+          storage: {{ .Values.gitserver.resources.storage }}
+      storageClassName: {{ .Values.persistentVolume.storageClass }}

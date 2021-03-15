@@ -1,0 +1,76 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  annotations:
+    description: Backend for text search operations.
+  labels:
+    deploy: sourcegraph
+    sourcegraph-resource-requires: no-cluster-admin
+    app.kubernetes.io/component: searcher
+  name: searcher
+spec:
+  minReadySeconds: 10
+  replicas: {{ .Values.searcher.replicas }}
+  revisionHistoryLimit: 10
+  selector:
+    matchLabels:
+      app: searcher
+  strategy:
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 1
+    type: RollingUpdate
+  template:
+    metadata:
+      labels:
+        deploy: sourcegraph
+        app: searcher
+    spec:
+      containers:
+      - name: searcher
+        env:
+        - name: SEARCHER_CACHE_SIZE_MB
+          value: "100000"
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        - name: CACHE_DIR
+          value: /mnt/cache/$(POD_NAME)
+        image: {{ include "searcher.container" . }}
+        terminationMessagePolicy: FallbackToLogsOnError
+        ports:
+        - containerPort: 3181
+          name: http
+        - containerPort: 6060
+          name: debug
+        readinessProbe:
+          failureThreshold: 3
+          httpGet:
+            path: /healthz
+            port: http
+            scheme: HTTP
+          periodSeconds: 5
+          timeoutSeconds: 5
+        resources:
+        {{- if .Values.searcher.resources.requests }}
+          requests:
+        {{- range $key, $val := .Values.searcher.resources.requests }}
+            {{ $key }}: {{ $val }}
+        {{- end }}
+        {{- end }}
+        {{- if .Values.searcher.resources.limits }}
+          limits:
+        {{- range $key, $val := .Values.searcher.resources.limits }}
+            {{ $key }}: {{ $val }}
+        {{- end }}
+        {{- end }}
+        volumeMounts:
+        - mountPath: /mnt/cache
+          name: cache-ssd
+      {{ include "jaegerAgent.spec" . | indent 6 }}
+      securityContext:
+        runAsUser: 0
+      volumes:
+      - emptyDir: {}
+        name: cache-ssd
